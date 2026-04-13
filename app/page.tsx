@@ -2,15 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  readLastLobbyEncoded,
-  setLastLobbyEncoded,
-} from "@/lib/boardStorage";
+import { setLastLobbyEncoded } from "@/lib/boardStorage";
 import {
   writeLobbyRole,
   type LobbyRole,
 } from "@/lib/lobbyRole";
 import { normalizeSeed } from "@/lib/generateBoard";
+import { WORD_PACK_DEFINITIONS } from "@/lib/word-packs/definitions";
+import {
+  formatPacksQuery,
+  resolveEnabledPackIds,
+} from "@/lib/word-packs/mergeWordPool";
+import {
+  readWordPackSelection,
+  writeWordPackSelection,
+} from "@/lib/wordPackPrefs";
 
 function lobbyParamToDisplaySeed(raw: string): string {
   try {
@@ -29,6 +35,9 @@ function readInitialSeed(): string {
 
 export default function Home() {
   const [seed, setSeed] = useState(readInitialSeed);
+  const [enabledPacks, setEnabledPacks] = useState<string[]>(() =>
+    resolveEnabledPackIds(null, null),
+  );
   const router = useRouter();
 
   useEffect(() => {
@@ -39,6 +48,7 @@ export default function Home() {
       if (lobbyQ) {
         const display = lobbyParamToDisplaySeed(lobbyQ);
         if (display) {
+          setSeed(display);
           setLastLobbyEncoded(encodeURIComponent(display));
         }
         window.history.replaceState(
@@ -48,15 +58,30 @@ export default function Home() {
         );
         return;
       }
-      const stored = readLastLobbyEncoded();
-      if (!stored) return;
-      try {
-        setSeed(decodeURIComponent(stored).toUpperCase());
-      } catch {
-        setSeed(stored.toUpperCase());
-      }
     });
   }, []);
+
+  useEffect(() => {
+    const stored = readWordPackSelection();
+    if (stored) setEnabledPacks(resolveEnabledPackIds(null, stored));
+  }, []);
+
+  const toggleWordPack = (id: string) => {
+    const definition = WORD_PACK_DEFINITIONS.find((item) => item.id === id);
+    if (definition?.required) return;
+    setEnabledPacks((previous) => {
+      const nextSet = new Set(previous);
+      if (nextSet.has(id)) nextSet.delete(id);
+      else nextSet.add(id);
+      const raw = WORD_PACK_DEFINITIONS.filter((item) =>
+        nextSet.has(item.id),
+      ).map((item) => item.id);
+      const next = resolveEnabledPackIds(null, raw);
+      writeWordPackSelection(next);
+      return next;
+    });
+  };
+
   const trimmed = seed.trim();
   const canJoin = trimmed.length > 0;
 
@@ -65,7 +90,11 @@ export default function Home() {
     const normalized = normalizeSeed(trimmed);
     writeLobbyRole(normalized, role);
     setLastLobbyEncoded(encodeURIComponent(trimmed));
-    router.push(`/game/${encodeURIComponent(trimmed)}`);
+    writeWordPackSelection(enabledPacks);
+    const packs = formatPacksQuery(enabledPacks);
+    router.push(
+      `/game/${encodeURIComponent(trimmed)}?packs=${encodeURIComponent(packs)}`,
+    );
   };
 
   return (
@@ -78,6 +107,45 @@ export default function Home() {
         </div>
 
         <div className="space-y-3">
+          <fieldset className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Word packs
+            </legend>
+            <p className="text-xs text-[var(--muted)]">
+              Shown on your board. Share the lobby link so everyone uses the same
+              set.
+            </p>
+            <ul className="max-h-48 space-y-2 overflow-y-auto pr-1 text-sm">
+              {WORD_PACK_DEFINITIONS.map((pack) => (
+                <li key={pack.id} className="flex gap-2">
+                  <input
+                    type="checkbox"
+                    id={`pack-${pack.id}`}
+                    checked={enabledPacks.includes(pack.id)}
+                    disabled={Boolean(pack.required)}
+                    onChange={() => toggleWordPack(pack.id)}
+                    className="mt-1 shrink-0 accent-[var(--accent)]"
+                  />
+                  <label
+                    htmlFor={`pack-${pack.id}`}
+                    className="min-w-0 cursor-pointer leading-snug text-[var(--foreground)]"
+                  >
+                    <span className="font-medium">{pack.displayName}</span>
+                    {pack.contentRating !== "everyone" ? (
+                      <span className="text-xs text-[var(--muted)]">
+                        {" "}
+                        · {pack.contentRating}
+                      </span>
+                    ) : null}
+                    <span className="block text-xs text-[var(--muted)]">
+                      {pack.description}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+
           <label htmlFor="seed" className="sr-only">
             Lobby seed
           </label>

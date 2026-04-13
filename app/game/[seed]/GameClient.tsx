@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -31,6 +31,13 @@ import {
   writeBoardState,
 } from "@/lib/boardStorage";
 import { nextLobbySeed } from "@/lib/nextLobbySeed";
+import { readWordPackSelection } from "@/lib/wordPackPrefs";
+import {
+  buildWordPoolForEnabledPacks,
+  formatPacksQuery,
+  parsePacksQuery,
+  resolveEnabledPackIds,
+} from "@/lib/word-packs/mergeWordPool";
 
 function decodeSeedParam(encoded: string) {
   try {
@@ -136,18 +143,26 @@ export function GameClient({
   encodedSeed: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const rulesDialogRef = useRef<HTMLDialogElement>(null);
   const rawFromUrl = decodeSeedParam(encodedSeed);
   const normalizedLobby = useMemo(() => normalizeSeed(rawFromUrl), [rawFromUrl]);
 
+  const enabledPackIds = useMemo(() => {
+    const fromUrl = parsePacksQuery(searchParams.get("packs"));
+    const fromStorage = readWordPackSelection();
+    return resolveEnabledPackIds(fromUrl, fromStorage);
+  }, [searchParams]);
+
   const board = useMemo((): Card[] | null => {
     if (!normalizedLobby) return null;
     try {
-      return generateBoard(rawFromUrl);
+      const pool = buildWordPoolForEnabledPacks(enabledPackIds);
+      return generateBoard(rawFromUrl, pool);
     } catch {
       return null;
     }
-  }, [rawFromUrl, normalizedLobby]);
+  }, [rawFromUrl, normalizedLobby, enabledPackIds]);
 
   const [lobbyRole, setLobbyRole] = useState<LobbyRole | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -310,8 +325,11 @@ export function GameClient({
     clearBoardState(normalizedLobby);
     writeLobbyRole(next, lobbyRole);
     setLastLobbyEncoded(encodeURIComponent(next));
-    router.push(`/game/${encodeURIComponent(next)}`);
-  }, [lobbyRole, normalizedLobby, router]);
+    const packs = formatPacksQuery(enabledPackIds);
+    router.push(
+      `/game/${encodeURIComponent(next)}?packs=${encodeURIComponent(packs)}`,
+    );
+  }, [enabledPackIds, lobbyRole, normalizedLobby, router]);
 
   const requestNextGame = useCallback(() => {
     if (

@@ -1,4 +1,3 @@
-import { WORDS } from "./words";
 import { mulberry32, stringToSeed } from "./seededRandom";
 
 export type CardType = "red" | "blue" | "neutral" | "assassin";
@@ -22,19 +21,24 @@ function normalizeSeed(seedStr: string) {
   return seedStr.trim().toLowerCase();
 }
 
-export function generateBoard(seedStr: string): Card[] {
+export function generateBoard(
+  seedStr: string,
+  wordPool: readonly string[],
+): Card[] {
   const normalized = normalizeSeed(seedStr);
   if (!normalized) {
     throw new Error("Seed must contain at least one non-space character.");
   }
-  if (WORDS.length < 25) {
-    throw new Error(`Word pool is too small (${WORDS.length}). Need at least 25.`);
+  if (wordPool.length < 25) {
+    throw new Error(
+      `Word pool is too small (${wordPool.length}). Need at least 25.`,
+    );
   }
 
   const seed = stringToSeed(normalized);
   const rand = mulberry32(seed);
 
-  const pool = [...WORDS];
+  const pool = [...wordPool];
   shuffleInPlace(pool, rand);
   const words = pool.slice(0, 25);
 
