@@ -67,13 +67,6 @@ export const WORD_PACK_DEFINITIONS: readonly WordPackDefinition[] = [
     defaultEnabled: false,
   },
   {
-    id: "kids-family",
-    displayName: "Kids & family",
-    description: "Shorter, concrete words suited for younger players.",
-    contentRating: "everyone",
-    defaultEnabled: false,
-  },
-  {
     id: "sci-fi-fantasy",
     displayName: "Sci‑fi & fantasy",
     description: "Tropes from speculative fiction and mythic adventure.",

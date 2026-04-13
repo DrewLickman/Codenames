@@ -3,7 +3,6 @@ import { WORD_PACK_DEFINITIONS } from "./definitions";
 import animals from "./packs/animals.json";
 import foodDrink from "./packs/food-drink.json";
 import geographyTravel from "./packs/geography-travel.json";
-import kidsFamily from "./packs/kids-family.json";
 import musicMedia from "./packs/music-media.json";
 import natureOutdoors from "./packs/nature-outdoors.json";
 import popCulture from "./packs/pop-culture.json";
@@ -19,7 +18,6 @@ export const WORDS_BY_PACK_ID: Readonly<Record<string, readonly string[]>> = {
   "sports-games": sportsGames,
   "geography-travel": geographyTravel,
   "stem-deep": stemDeep,
-  "kids-family": kidsFamily,
   "sci-fi-fantasy": sciFiFantasy,
   "pop-culture": popCulture,
   "music-media": musicMedia,

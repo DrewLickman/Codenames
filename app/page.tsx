@@ -99,7 +99,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
-      <main className="w-full max-w-md space-y-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm">
+      <main className="w-full max-w-md space-y-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm md:max-w-2xl">
         <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--foreground)]">
             Codenames
@@ -115,9 +115,9 @@ export default function Home() {
               Shown on your board. Share the lobby link so everyone uses the same
               set.
             </p>
-            <ul className="max-h-48 space-y-2 overflow-y-auto pr-1 text-sm">
+            <ul className="grid max-h-48 grid-cols-1 gap-x-6 gap-y-2 overflow-y-auto pr-1 text-sm md:max-h-none md:overflow-visible md:grid-cols-2">
               {WORD_PACK_DEFINITIONS.map((pack) => (
-                <li key={pack.id} className="flex gap-2">
+                <li key={pack.id} className="flex min-w-0 gap-2">
                   <input
                     type="checkbox"
                     id={`pack-${pack.id}`}
