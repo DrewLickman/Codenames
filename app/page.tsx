@@ -62,8 +62,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const stored = readWordPackSelection();
-    if (stored) setEnabledPacks(resolveEnabledPackIds(null, stored));
+    queueMicrotask(() => {
+      const stored = readWordPackSelection();
+      if (stored) setEnabledPacks(resolveEnabledPackIds(null, stored));
+    });
   }, []);
 
   const toggleWordPack = (id: string) => {
@@ -98,53 +100,64 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
-      <main className="w-full max-w-md space-y-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm md:max-w-2xl">
+    <div className="flex flex-1 flex-col items-center justify-center px-3 py-6 sm:px-4 sm:py-12">
+      <main className="w-full max-w-md space-y-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 md:max-w-2xl md:p-8">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--foreground)]">
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
             Codenames
           </h1>
         </div>
 
         <div className="space-y-3">
-          <fieldset className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
-            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Word packs
-            </legend>
-            <p className="text-xs text-[var(--muted)]">
-              Shown on your board. Share the lobby link so everyone uses the same
-              set.
-            </p>
-            <ul className="grid max-h-48 grid-cols-1 gap-x-6 gap-y-2 overflow-y-auto pr-1 text-sm md:max-h-none md:overflow-visible md:grid-cols-2">
-              {WORD_PACK_DEFINITIONS.map((pack) => (
-                <li key={pack.id} className="flex min-w-0 gap-2">
-                  <input
-                    type="checkbox"
-                    id={`pack-${pack.id}`}
-                    checked={enabledPacks.includes(pack.id)}
-                    disabled={Boolean(pack.required)}
-                    onChange={() => toggleWordPack(pack.id)}
-                    className="mt-1 shrink-0 accent-[var(--accent)]"
-                  />
-                  <label
-                    htmlFor={`pack-${pack.id}`}
-                    className="min-w-0 cursor-pointer leading-snug text-[var(--foreground)]"
-                  >
-                    <span className="font-medium">{pack.displayName}</span>
-                    {pack.contentRating !== "everyone" ? (
-                      <span className="text-xs text-[var(--muted)]">
-                        {" "}
-                        · {pack.contentRating}
-                      </span>
-                    ) : null}
-                    <span className="block text-xs text-[var(--muted)]">
-                      {pack.description}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
+          <details className="rounded-lg border border-[var(--border)] bg-[var(--background)]">
+            <summary className="cursor-pointer list-none px-3 py-2.5 text-[var(--foreground)] marker:hidden [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center justify-between gap-2">
+                <span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Word packs
+                  </span>
+                  <span className="ml-2 text-xs font-normal text-[var(--muted)]">
+                    Tap to customize
+                  </span>
+                </span>
+                <span className="shrink-0 text-[var(--muted)]" aria-hidden>
+                  ▾
+                </span>
+              </span>
+            </summary>
+            <div className="space-y-2 border-t border-[var(--border)] px-3 pb-3 pt-2">
+              <p className="text-xs text-[var(--muted)]">
+                Shown on your board. Share the lobby link so everyone uses the
+                same set.
+              </p>
+              <fieldset className="min-w-0 space-y-2">
+                <legend className="sr-only">Word packs</legend>
+                <ul className="grid max-h-[min(50vh,20rem)] grid-cols-1 gap-x-6 gap-y-2 overflow-y-auto pr-1 text-sm md:max-h-none md:grid-cols-2 md:overflow-visible">
+                  {WORD_PACK_DEFINITIONS.map((pack) => (
+                    <li key={pack.id} className="flex min-w-0 gap-2">
+                      <input
+                        type="checkbox"
+                        id={`pack-${pack.id}`}
+                        checked={enabledPacks.includes(pack.id)}
+                        disabled={Boolean(pack.required)}
+                        onChange={() => toggleWordPack(pack.id)}
+                        className="mt-1 shrink-0 accent-[var(--accent)]"
+                      />
+                      <label
+                        htmlFor={`pack-${pack.id}`}
+                        className="min-w-0 cursor-pointer leading-snug text-[var(--foreground)]"
+                      >
+                        <span className="font-medium">{pack.displayName}</span>
+                        <span className="block text-xs text-[var(--muted)]">
+                          {pack.description}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </fieldset>
+            </div>
+          </details>
 
           <label htmlFor="seed" className="sr-only">
             Lobby seed

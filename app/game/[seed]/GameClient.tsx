@@ -29,7 +29,9 @@ import {
   readBoardState,
   setLastLobbyEncoded,
   writeBoardState,
+  type TurnTimerState,
 } from "@/lib/boardStorage";
+import { GameActionsMenu } from "./GameActionsMenu";
 import { nextLobbySeed } from "@/lib/nextLobbySeed";
 import { readWordPackSelection } from "@/lib/wordPackPrefs";
 import {
@@ -38,6 +40,8 @@ import {
   parsePacksQuery,
   resolveEnabledPackIds,
 } from "@/lib/word-packs/mergeWordPool";
+
+const TURN_SECONDS = 60;
 
 function decodeSeedParam(encoded: string) {
   try {
@@ -95,7 +99,7 @@ function TurnTimerButton({
   timersLocked: boolean;
 }) {
   const active = activeTurn === team && secondsLeft > 0;
-  const fillPct = active ? (secondsLeft / 60) * 100 : 0;
+  const fillPct = active ? (secondsLeft / TURN_SECONDS) * 100 : 0;
   const fillClass = team === "red" ? "turn-fill-red" : "turn-fill-blue";
 
   return (
@@ -173,6 +177,8 @@ export function GameClient({
 
   const [activeTurn, setActiveTurn] = useState<"red" | "blue" | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [turnTimer, setTurnTimer] = useState<TurnTimerState | null>(null);
+  const turnEndsAtRef = useRef<number | null>(null);
   const turnIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTurnTimer = useCallback(() => {
@@ -181,6 +187,37 @@ export function GameClient({
       turnIntervalRef.current = null;
     }
   }, []);
+
+  const beginTurnCountdown = useCallback(
+    (team: "red" | "blue", endsAt: number) => {
+      clearTurnTimer();
+      turnEndsAtRef.current = endsAt;
+      setTurnTimer({ team, endsAt });
+      setActiveTurn(team);
+      setSecondsLeft(
+        Math.min(
+          TURN_SECONDS,
+          Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)),
+        ),
+      );
+      turnIntervalRef.current = setInterval(() => {
+        const end = turnEndsAtRef.current;
+        if (end == null) return;
+        const left = Math.min(
+          TURN_SECONDS,
+          Math.max(0, Math.ceil((end - Date.now()) / 1000)),
+        );
+        setSecondsLeft(left);
+        if (left <= 0) {
+          clearTurnTimer();
+          turnEndsAtRef.current = null;
+          setTurnTimer(null);
+          setActiveTurn(null);
+        }
+      }, 1000);
+    },
+    [clearTurnTimer],
+  );
 
   const startTurn = useCallback(
     (team: "red" | "blue") => {
@@ -199,21 +236,10 @@ export function GameClient({
       });
       if (redGuessed >= RED_AGENT_GOAL || blueGuessed >= BLUE_AGENT_GOAL) return;
 
-      clearTurnTimer();
-      setActiveTurn(team);
-      setSecondsLeft(60);
-      turnIntervalRef.current = setInterval(() => {
-        setSecondsLeft((s) => {
-          if (s <= 1) {
-            clearTurnTimer();
-            setActiveTurn(null);
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
+      const endsAt = Date.now() + TURN_SECONDS * 1000;
+      beginTurnCountdown(team, endsAt);
     },
-    [board, clearTurnTimer, revealed],
+    [board, beginTurnCountdown, revealed],
   );
 
   useEffect(() => () => clearTurnTimer(), [clearTurnTimer]);
@@ -242,6 +268,9 @@ export function GameClient({
         if (parsed) {
           setRevealed(parsed.revealed);
           setStagedIndex(parsed.stagedIndex);
+          if (role === "host" && parsed.turnTimer) {
+            beginTurnCountdown(parsed.turnTimer.team, parsed.turnTimer.endsAt);
+          }
         }
       } catch {
         /* ignore corrupt storage */
@@ -249,16 +278,30 @@ export function GameClient({
       setHydrated(true);
       setStorageReady(true);
     });
-  }, [board, encodedSeed, normalizedLobby, router]);
+  }, [beginTurnCountdown, board, encodedSeed, normalizedLobby, router]);
 
   useEffect(() => {
     if (!storageReady || !board || !normalizedLobby || !lobbyRole) return;
+    let timerForWrite: TurnTimerState | null = turnTimer;
+    if (lobbyRole !== "host") {
+      const fromDisk = readBoardState(normalizedLobby);
+      timerForWrite = fromDisk?.turnTimer ?? null;
+    }
     writeBoardState(normalizedLobby, {
       v: STORAGE_VERSION,
       revealed,
       stagedIndex,
+      turnTimer: timerForWrite,
     });
-  }, [board, lobbyRole, normalizedLobby, revealed, stagedIndex, storageReady]);
+  }, [
+    board,
+    lobbyRole,
+    normalizedLobby,
+    revealed,
+    stagedIndex,
+    storageReady,
+    turnTimer,
+  ]);
 
   useEffect(() => {
     if (!board || !normalizedLobby) return;
@@ -346,6 +389,8 @@ export function GameClient({
     if (!gameOver) return;
     queueMicrotask(() => {
       clearTurnTimer();
+      turnEndsAtRef.current = null;
+      setTurnTimer(null);
       setActiveTurn(null);
       setSecondsLeft(0);
     });
@@ -396,59 +441,26 @@ export function GameClient({
   const isHost = lobbyRole === "host";
   const isSpymaster = lobbyRole === "red_spymaster" || lobbyRole === "blue_spymaster";
 
-  const topActions = (
-    <div className="flex flex-wrap justify-end gap-2">
-      {(isHost || isSpymaster) && (
-        <button
-          type="button"
-          onClick={() => rulesDialogRef.current?.showModal()}
-          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--foreground)] shadow-sm"
-        >
-          Rules
-        </button>
-      )}
-      {(isHost || isSpymaster) && (
-        <button
-          type="button"
-          onClick={requestNextGame}
-          className="rounded-lg border-2 border-[var(--accent)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--foreground)] shadow-sm"
-        >
-          Next Game!
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={copyLobbyLink}
-        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--foreground)] shadow-sm"
-      >
-        {copyState === "copied"
-          ? "Link copied"
-          : copyState === "error"
-            ? "Copy blocked"
-            : "Copy lobby link"}
-      </button>
-      <Link
-        href="/"
-        onClick={() => {
-          clearBoardState(normalizedLobby);
-          clearLastLobbyPointer();
-        }}
-        className="inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--foreground)] shadow-sm"
-      >
-        New lobby
-      </Link>
-    </div>
-  );
-
   return (
-    <div className="relative mx-auto w-full max-w-5xl px-4 py-6 pr-32 sm:pr-52">
-      <div className="absolute right-4 top-4 z-20 max-w-[min(100%,14rem)] sm:max-w-none">
-        {topActions}
+    <div className="relative mx-auto w-full max-w-5xl px-3 py-4 sm:px-4 sm:py-6 md:pr-52">
+      <div className="mb-4 flex flex-wrap justify-end gap-2 md:absolute md:right-4 md:top-6 md:mb-0 md:z-20 md:max-w-none">
+        <GameActionsMenu
+          showHostAndSpymasterActions={isHost || isSpymaster}
+          onRules={() => rulesDialogRef.current?.showModal()}
+          onNextGame={requestNextGame}
+          onCopyLink={copyLobbyLink}
+          copyState={copyState}
+          newLobbyHref="/"
+          onNewLobbyClick={() => {
+            clearBoardState(normalizedLobby);
+            clearLastLobbyPointer();
+          }}
+        />
       </div>
 
-      <div className="flex flex-col gap-6 pt-2">
+      <div className="flex flex-col gap-6 pt-0 md:pt-2">
         {isHost ? (
-          <p className="text-center text-lg font-medium text-[var(--foreground)] sm:text-xl md:text-2xl">
+          <p className="text-center text-base font-medium text-[var(--foreground)] sm:text-lg md:text-2xl">
             <span className="text-[var(--muted)]">Lobby code: </span>
             <span className="font-mono tracking-tight text-[var(--foreground)]">
               {normalizedLobby}
@@ -456,7 +468,7 @@ export function GameClient({
           </p>
         ) : (
           <>
-            <p className="text-center text-lg font-medium text-[var(--foreground)] sm:text-xl md:text-2xl">
+            <p className="text-center text-base font-medium text-[var(--foreground)] sm:text-lg md:text-2xl">
               <span className="text-[var(--muted)]">Lobby code: </span>
               <span className="font-mono tracking-tight text-[var(--foreground)]">
                 {normalizedLobby}
@@ -531,7 +543,7 @@ export function GameClient({
         )}
 
         <div
-          className="grid grid-cols-5 gap-2 sm:gap-3"
+          className="grid grid-cols-5 gap-1.5 sm:gap-2 md:gap-3"
           role="grid"
           aria-label="Codenames board"
           data-board-view={isSpymaster ? "spymaster" : "default"}
@@ -575,7 +587,7 @@ export function GameClient({
                 onClick={() => {
                   if (canInteractHost) hostCellClick(i);
                 }}
-                className={`min-h-[4.5rem] rounded-lg px-1 py-2 text-center text-xs sm:min-h-[5.5rem] sm:text-sm ${revealedCell ? "border-2" : "border"} ${wordCaseClass} ${visual} ${stagedClass} ${
+                className={`min-h-[3.5rem] rounded-lg px-0.5 py-1.5 text-center text-[length:clamp(0.625rem,2.4vw,0.875rem)] sm:min-h-[4.5rem] sm:px-1 sm:py-2 md:min-h-[5.5rem] md:text-sm ${revealedCell ? "border-2" : "border"} ${wordCaseClass} ${visual} ${stagedClass} ${
                   canInteractHost
                     ? "cursor-pointer hover:brightness-[1.02] active:brightness-[0.98]"
                     : "cursor-default"
